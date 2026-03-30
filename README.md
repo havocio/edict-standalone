@@ -1,6 +1,6 @@
 # 三省六部 · Edict
 
-> 一个以中国古代「三省六部制」为设计灵感的 **多 Agent 协作系统**，用 LLM 驱动的角色模拟任务分拣、方案规划、审核驳回、任务分发与执行汇聚的完整工作流。
+> 一个以edict(中国古代「三省六部制」)为设计灵感的 **多 Agent 协作系统**，用 LLM 驱动的角色模拟任务分拣、方案规划、审核驳回、任务分发与执行汇聚的完整工作流。脱离openclaw, 完全独立。
 
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
