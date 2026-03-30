@@ -1,6 +1,6 @@
 """
 Dashboard API 服务器 — 纯 Python 标准库，零额外依赖
-提供 REST API + 静态文件服务
+提供 REST API + 静态文件服务 + 制度信息 API
 默认端口：7891
 """
 import json
@@ -12,14 +12,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-# 把项目根目录加到 path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 # ==================== 关键：使用统一日志模块 ====================
 from logger import configure_logging, logger
 
-# 配置日志系统（必须在导入业务模块之前）
 configure_logging(
     log_file=ROOT / "dashboard.log",
     level=logging.DEBUG,
@@ -30,30 +28,24 @@ logger.debug("✓ 日志系统已初始化，DEBUG 级别已启用")
 logger.info("✓ 日志系统运行中")
 # ================================================================================
 
-# 现在导入业务模块，此时日志已经配置好了
-from scripts import task_store
+# 使用通用 task_store（通过兼容层）
+from framework import task_store
 from scripts.orchestrator import run_pipeline
 
-# 向后兼容的 _log 函数
+
 def _log(msg: str):
     logger.info(msg)
 
 
 STATIC_DIR = ROOT / "dashboard" / "static"
 
-# 运行中的流水线线程 {task_id: thread}
 _running_pipelines: dict[str, threading.Thread] = {}
-
-# 最近一次处理结果缓存（用于闲聊等无task_id的场景）
 _latest_result: dict = {"pending": False}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HTTP 处理器
-# ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        pass  # 静默默认日志，避免刷屏
+        pass
 
     def _send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
@@ -86,7 +78,6 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         return {}
 
-    # ── OPTIONS（CORS 预检）────────────────────────────────────────────────
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -94,7 +85,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
-    # ── GET ────────────────────────────────────────────────────────────────
     def do_GET(self):
         parsed = urlparse(self.path)
         path   = parsed.path
@@ -107,7 +97,6 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_get_api(path, parse_qs(parsed.query))
             return
 
-        # 静态文件
         rel = path.lstrip("/")
         target = STATIC_DIR / rel
         ext_map = {".js": "application/javascript", ".css": "text/css",
@@ -121,7 +110,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(task_store.load_all_tasks())
 
         elif path == "/api/tasks/latest":
-            # 返回最近一次处理结果（包括闲聊）
             self._send_json(_latest_result)
 
         elif path.startswith("/api/tasks/"):
@@ -144,17 +132,41 @@ class Handler(BaseHTTPRequestHandler):
                 "running": list(_running_pipelines.keys()),
             })
 
+        elif path == "/api/regimes":
+            # 返回当前制度和所有可用制度
+            try:
+                from regimes import get_current_regime, _discover_regimes
+                from framework.core import RegimeRegistry
+                current = get_current_regime()
+                available = _discover_regimes()
+                # 加载所有制度获取完整元数据
+                from regimes import _load_all_regimes
+                _load_all_regimes()
+                all_metas = RegimeRegistry.list_all()
+                self._send_json({
+                    "current": {
+                        "id": current.meta.id,
+                        "name": current.meta.name,
+                        "era": current.meta.era,
+                        "description": current.meta.description,
+                    },
+                    "available": [
+                        {"id": m.id, "name": m.name, "era": m.era, "tags": m.tags}
+                        for m in all_metas
+                    ],
+                })
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+
         else:
             self._send_json({"error": "unknown endpoint"}, 404)
 
-    # ── POST ───────────────────────────────────────────────────────────────
     def do_POST(self):
         path = urlparse(self.path).path
         body = self._read_body()
         self._handle_post_api(path, body)
 
     def _handle_post_api(self, path, body):
-        # 新建任务（异步运行流水线）
         if path == "/api/tasks/create":
             message = body.get("message", "").strip()
             if not message:
@@ -163,7 +175,6 @@ class Handler(BaseHTTPRequestHandler):
 
             _log(f"收到新任务: {message[:100]}")
 
-            # 标记为处理中
             _latest_result["pending"] = True
             _latest_result.pop("result", None)
             _latest_result.pop("task_id", None)
@@ -192,11 +203,9 @@ class Handler(BaseHTTPRequestHandler):
 
             t = threading.Thread(target=run, daemon=True)
             t.start()
-
             self._send_json({"status": "accepted", "message": "任务已提交，正在处理..."})
             return
 
-        # 手动推进状态
         if path == "/api/tasks/advance":
             task_id  = body.get("task_id")
             to_state = body.get("state")
@@ -210,7 +219,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, 400)
             return
 
-        # 取消任务
         if path == "/api/tasks/cancel":
             task_id = body.get("task_id")
             reason  = body.get("reason", "用户取消")
@@ -224,7 +232,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, 400)
             return
 
-        # 解除阻塞（Blocked → Doing/Assigned）
         if path == "/api/tasks/unblock":
             task_id = body.get("task_id")
             note    = body.get("note", "人工解除阻塞")
@@ -238,10 +245,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, 400)
             return
 
-        # 门下省审核操作（手动准奏/封驳）
+        # 门下省审核操作
         if path == "/api/tasks/review":
             task_id = body.get("task_id")
-            verdict = body.get("verdict", "approved")  # approved | rejected
+            verdict = body.get("verdict", "approved")
             reason  = body.get("reason", "")
             if not task_id:
                 self._send_json({"error": "缺少 task_id"}, 400)
@@ -259,8 +266,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"error": "unknown endpoint"}, 404)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 def run_server(host="127.0.0.1", port=7891):
+    # 启动时初始化制度状态机
+    from regimes import get_current_regime
+    regime = get_current_regime()
+    task_store.configure_state_machine(
+        regime.meta.state_transitions,
+        regime.meta.state_agent_map,
+    )
+    _log(f"当前制度: {regime.meta.name} ({regime.meta.id})")
+    
     server = HTTPServer((host, port), Handler)
     _log(f"Dashboard running -> http://{host}:{port}")
     try:
@@ -271,7 +286,7 @@ def run_server(host="127.0.0.1", port=7891):
 
 if __name__ == "__main__":
     import argparse
-    p = argparse.ArgumentParser(description="三省六部 Dashboard 服务器")
+    p = argparse.ArgumentParser(description="Edict Dashboard 服务器")
     p.add_argument("--host", default=os.getenv("DASHBOARD_HOST", "127.0.0.1"))
     p.add_argument("--port", type=int, default=int(os.getenv("DASHBOARD_PORT", 7891)))
     args = p.parse_args()
