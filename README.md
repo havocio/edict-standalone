@@ -13,8 +13,9 @@
 - **零框架依赖后端** — 纯 Python 标准库 HTTP 服务，`pip install -r requirements.txt` 即可运行
 - **多 LLM 支持** — OpenAI / Anthropic / DeepSeek / Ollama / 任意兼容接口，一个配置切换
 - **完整工作流引擎** — 每种制度有独立的状态机、角色定义、Agent 逻辑和编排流水线
-- **Web 看板 UI** — 古风主题单文件前端，实时查看任务流转、进展日志、最终结果
+- **Web 看板 UI** — Vue 3 + Vite 前端，深色/浅色主题切换，实时查看任务流转、进展日志
 - **命令行 & 交互式终端** — 支持 dashboard / 单次运行 / 交互模式 / 列出制度四种使用方式
+- **一键启动** — `start.bat` 或 `python start.py` 同时启动前后端
 - **状态机 + 持久化** — 任务全生命周期状态管理，JSON 文件持久化，重启不丢失
 
 ## 🏛️ 内置制度
@@ -123,10 +124,42 @@ cp .env.example .env
 
 ### 4. 启动
 
-**看板模式**（推荐，有 Web UI）：
+**一键启动**（推荐，同时启动前后端）：
+```bash
+# Windows 双击 start.bat
+# 或命令行
+python start.py
+
+# 访问 http://127.0.0.1:5173（前端开发服务器）
+# 后端 API http://127.0.0.1:7891
+```
+
+**生产模式**（构建后运行）：
+```bash
+# Windows 双击 start-build.bat
+# 或命令行
+python start.py --build
+
+# 访问 http://127.0.0.1:7891
+```
+
+**手动启动后端**：
 ```bash
 python main.py
 # 浏览器访问 http://127.0.0.1:7891
+```
+
+**前端开发**（热更新）：
+```bash
+cd dashboard-ui
+npm install
+npm run dev      # 开发服务器 http://127.0.0.1:5173
+```
+
+**构建前端**：
+```bash
+cd dashboard-ui
+npm run build    # 输出到 dashboard/static/
 ```
 
 **命令行单次运行**（默认制度）：
@@ -154,6 +187,9 @@ python main.py regimes
 ```
 edict-standalone/
 ├── main.py                  # 程序入口（支持 dashboard / run / chat / regimes）
+├── start.py                 # 一键启动脚本（前后端）
+├── start.bat                # Windows 开发模式启动
+├── start-build.bat          # Windows 生产模式启动
 ├── logger.py                # 统一日志配置
 ├── requirements.txt         # Python 依赖
 ├── .env.example             # 环境变量模板
@@ -181,8 +217,18 @@ edict-standalone/
 │   └── task_store.py        # 重导出 framework.task_store
 ├── dashboard/
 │   ├── server.py            # 纯 Python HTTP 服务器
-│   └── static/
-│       └── index.html       # 看板前端
+│   └── static/              # 前端构建输出（由 dashboard-ui 生成）
+├── dashboard-ui/            # Vue 3 + Vite 前端源码
+│   ├── src/
+│   │   ├── components/      # Vue 组件
+│   │   ├── stores/          # Pinia 状态管理
+│   │   ├── types/           # TypeScript 类型
+│   │   ├── App.vue          # 根组件
+│   │   └── main.ts          # 入口
+│   ├── package.json
+│   └── vite.config.ts
+├── docs/
+│   └── images/              # 文档图片
 └── test/
     └── api.py               # API 连接测试脚本
 ```
