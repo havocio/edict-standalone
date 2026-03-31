@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>🏛️ 三省六部 · 军机处看板</title>
+<title>🏛️ 军机处 · 制度看板</title>
 <style>
   /* ── 设计 Token ─────────────────────────────────────────────────────────── */
   :root {
@@ -15,15 +15,30 @@
     --blue:       #2980b9;
     --purple:     #8e44ad;
     --gray:       #7f8c8d;
+    --radius:     12px;
+    --shadow:     0 4px 24px rgba(0,0,0,.5);
+    --transition: 0.3s cubic-bezier(0.16,1,0.3,1);
+    /* 深色主题（默认） */
     --bg:         #0d0f14;
     --bg2:        #151820;
     --bg3:        #1e2230;
     --border:     rgba(200, 169, 110, 0.2);
     --text:       #e8dcc8;
     --text-dim:   #8b8070;
-    --radius:     12px;
-    --shadow:     0 4px 24px rgba(0,0,0,.5);
-    --transition: 0.3s cubic-bezier(0.16,1,0.3,1);
+    --topbar-bg:  rgba(13,15,20,.92);
+    --input-bg:   var(--bg3);
+  }
+  /* 浅色主题 */
+  [data-theme="light"] {
+    --bg:         #f5f3ef;
+    --bg2:        #ebe8e2;
+    --bg3:        #e0dcd4;
+    --border:     rgba(139, 105, 20, 0.25);
+    --text:       #3d3a35;
+    --text-dim:   #7a756d;
+    --topbar-bg:  rgba(245,243,239,.95);
+    --input-bg:   #ffffff;
+    --shadow:     0 4px 24px rgba(0,0,0,.1);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,10 +56,18 @@
     position: sticky; top: 0; z-index: 100;
     display: flex; align-items: center; gap: 16px;
     padding: 14px 28px;
-    background: rgba(13,15,20,.92);
+    background: var(--topbar-bg);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
   }
+  .theme-toggle {
+    padding: 6px 12px; border-radius: 8px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 13px; cursor: pointer;
+    transition: var(--transition);
+    margin-left: 8px;
+  }
+  .theme-toggle:hover { background: rgba(200,169,110,.12); color: var(--gold); }
   .topbar-logo { font-size: 22px; letter-spacing: 2px; color: var(--gold); font-weight: 700; }
   .topbar-sub  { font-size: 12px; color: var(--text-dim); margin-left: -8px; }
   .topbar-spacer { flex: 1; }
@@ -268,7 +291,7 @@
 
 <!-- ── 顶栏 ─────────────────────────────────────────────────────────────── -->
 <div class="topbar">
-  <div class="topbar-logo">🏛️ Edict</div>
+  <div class="topbar-logo">🏛️ 军机处</div>
   <div class="topbar-sub" id="regime-name">制度看板</div>
   <div class="topbar-spacer"></div>
   <div class="topbar-stats">
@@ -286,6 +309,7 @@
     </div>
   </div>
   <button class="refresh-btn" onclick="loadTasks()">⟳ 刷新</button>
+  <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
 </div>
 
 <!-- ── 主区域 ────────────────────────────────────────────────────────────── -->
@@ -295,7 +319,7 @@
   <div class="sidebar">
     <div class="sidebar-title">下旨</div>
     <div class="create-area">
-      <textarea id="msg-input" rows="4" placeholder="在此输入旨意，太子将为您分拣…"></textarea>
+      <textarea id="msg-input" rows="4" placeholder="在此输入旨意…"></textarea>
       <button class="send-btn" id="send-btn" onclick="sendMessage()">⚡ 传旨</button>
     </div>
     <div class="sidebar-title" style="margin-top:4px">旨意台账</div>
