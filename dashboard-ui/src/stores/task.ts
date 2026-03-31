@@ -28,12 +28,14 @@ export const useTaskStore = defineStore('task', () => {
   async function loadTasks() {
     loading.value = true
     try {
-      const [data, s] = await Promise.all([
-        api<Task[]>('/api/tasks'),
-        api<TaskStats>('/api/stats'),
-      ])
-      tasks.value = Array.isArray(data) ? data.reverse() : []
-      stats.value = s || { total: tasks.value.length, running: 0, done: 0 }
+      const res = await api<{tasks: Task[]; count: number}>('/api/tasks')
+      tasks.value = res.tasks ? res.tasks.reverse() : []
+      const runningCount = tasks.value.filter(t => !['Done', 'Cancelled'].includes(t.state)).length
+      stats.value = {
+        total: tasks.value.length,
+        running: runningCount,
+        done: tasks.value.filter(t => t.state === 'Done').length
+      }
 
       // 自动选中
       if (activeId.value) {
@@ -81,7 +83,7 @@ export const useTaskStore = defineStore('task', () => {
 
   // 创建任务并轮询
   async function createTask(message: string) {
-    await api('/api/tasks/create', 'POST', { message })
+    await api('/api/tasks', 'POST', { message })
     startPolling()
   }
 
@@ -125,17 +127,17 @@ export const useTaskStore = defineStore('task', () => {
   // 任务操作
   async function cancelTask(id: string) {
     if (!confirm('确认取消该任务？')) return
-    await api('/api/tasks/cancel', 'POST', { task_id: id, reason: '用户手动取消' })
+    await api(`/api/tasks/${id}/cancel`, 'POST')
     await loadTasks()
   }
 
   async function advanceTask(id: string, state: string) {
-    await api('/api/tasks/advance', 'POST', { task_id: id, state })
+    await api(`/api/tasks/${id}/advance`, 'POST')
     await loadTasks()
   }
 
   async function unblockTask(id: string, note: string) {
-    await api('/api/tasks/unblock', 'POST', { task_id: id, note })
+    await api(`/api/tasks/${id}/unblock`, 'POST')
     await loadTasks()
   }
 

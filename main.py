@@ -35,8 +35,14 @@ def cmd_dashboard():
     """启动看板 Web 服务"""
     host = os.getenv("DASHBOARD_HOST", "127.0.0.1")
     port = int(os.getenv("DASHBOARD_PORT", 7891))
-    from dashboard.server import run_server
-    run_server(host, port)
+    from dashboard_server import start_dashboard_server
+    start_dashboard_server(port)
+
+
+def process_message(message: str, on_event=None) -> dict:
+    """处理消息（供外部调用）"""
+    from scripts.orchestrator import run_pipeline
+    return run_pipeline(message, on_event=on_event)
 
 
 def cmd_run(message: str, regime_override: str = None):
@@ -45,7 +51,6 @@ def cmd_run(message: str, regime_override: str = None):
     if regime_override:
         os.environ["REGIME"] = regime_override
 
-    from scripts.orchestrator import run_pipeline
     regime_name = _get_regime_name()
 
     def on_event(event_type, data):
@@ -79,7 +84,7 @@ def cmd_run(message: str, regime_override: str = None):
             print(f"  {icon} [{event_type}]")
 
     print(f"\n🏛️  [{regime_name}] 开始处理：\"{message}\"\n{'─'*50}")
-    result = run_pipeline(message, on_event=on_event)
+    result = process_message(message, on_event=on_event)
     print(f"\n{'─'*50}")
     if result.get("state") == "Done":
         print(f"🎉 任务完成 [{result.get('task_id')}]\n")

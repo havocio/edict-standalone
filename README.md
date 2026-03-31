@@ -1,4 +1,4 @@
-# Edict — 可插拔制度多 Agent 编排系统
+# 可插拔制度多 Agent 编排系统
 
 > 以中国古代政治制度为设计灵感的 **多 Agent 协作系统**。支持多种制度模块可插拔切换：三省六部制、民主集中制等。用 LLM 驱动角色模拟任务分拣、方案规划、审核驳回、任务分发与执行汇聚的完整工作流。完全独立，零外部框架依赖。
 
@@ -215,9 +215,7 @@ edict-standalone/
 │   ├── llm_client.py        # LLM 统一封装
 │   ├── orchestrator.py      # 委托给当前制度模块
 │   └── task_store.py        # 重导出 framework.task_store
-├── dashboard/
-│   ├── server.py            # 纯 Python HTTP 服务器
-│   └── static/              # 前端构建输出（由 dashboard-ui 生成）
+├── dashboard_server.py      # 纯 Python HTTP 服务器
 ├── dashboard-ui/            # Vue 3 + Vite 前端源码
 │   ├── src/
 │   │   ├── components/      # Vue 组件
