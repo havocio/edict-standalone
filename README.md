@@ -79,6 +79,14 @@
 ✅ Done
 ```
 
+## 📸 界面预览
+
+![Dashboard 深色主题](docs/images/dashboard-dark.png)
+*军机处看板 - 实时任务流转与进展日志*
+
+![Dashboard 任务详情](docs/images/dashboard-detail.png)
+*任务详情 - 状态流程可视化与最终结果展示*
+
 ## 🚀 快速开始
 
 ### 1. 克隆项目
