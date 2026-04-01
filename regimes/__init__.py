@@ -63,9 +63,8 @@ def get_regime(regime_id: str):
 
 def get_current_regime():
     """
-    获取当前应使用的制度
-    优先级：环境变量 REGIME > 默认 san_sheng_liu_bu
+    获取当前制度实例
+    使用 framework.core 中的公共函数
     """
-    regime_id = os.getenv("REGIME", "san_sheng_liu_bu").strip()
-    logger.info(f"当前制度: {regime_id}")
-    return get_regime(regime_id)
+    from framework.core import get_current_regime as _get_current_regime
+    return _get_current_regime()

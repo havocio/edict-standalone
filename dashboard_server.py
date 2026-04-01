@@ -33,15 +33,12 @@ STATIC_DIR = ROOT / "dashboard-ui" / "dist"
 
 # 导入制度相关模块
 from framework import RegimeRegistry
-from regimes import get_regime
 from framework import task_store
+from framework.core import get_current_regime, get_current_regime_id, set_current_regime
 
 # 运行时状态
 _running_pipelines: dict[str, threading.Thread] = {}
 _latest_result: dict = {"pending": False}
-
-# 当前激活的制度 ID（运行时可切换，优先级高于 .env 中的 REGIME）
-_current_regime_id: str = os.getenv("REGIME", "san_sheng_liu_bu")
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -204,18 +201,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "state_count": len(meta.states),
             })
 
-        global _current_regime_id
+        current_id = get_current_regime_id()
         # 找当前制度完整对象
-        current_obj = next((r for r in regimes if r["id"] == _current_regime_id), None)
+        current_obj = next((r for r in regimes if r["id"] == current_id), None)
         self._send_json({
             "regimes": regimes,
-            "current": _current_regime_id,
+            "current": current_id,
             "current_obj": current_obj,
         })
 
     def _handle_switch_regime(self):
         """切换当前制度"""
-        global _current_regime_id
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length == 0:
             self._send_error("Empty body", 400)
@@ -237,9 +233,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_error(f"Unknown regime: {regime_id}. Available: {valid_ids}", 400)
                 return
 
-            old_id = _current_regime_id
-            _current_regime_id = regime_id
-            os.environ["REGIME"] = regime_id
+            old_id = get_current_regime_id()
+            set_current_regime(regime_id)
             logger.info(f"制度已切换: {old_id} -> {regime_id}")
 
             # 返回切换后的制度信息
@@ -280,7 +275,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             data = json.loads(body)
             message = data.get("message", "").strip()
             # 允许前端指定制度，否则用当前激活制度
-            task_regime_id = data.get("regime_id", "").strip() or _current_regime_id
+            task_regime_id = data.get("regime_id", "").strip() or get_current_regime_id()
 
             if not message:
                 self._send_error("Message is required", 400)
@@ -293,9 +288,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 global _latest_result
                 try:
                     _latest_result = {"pending": True}
-                    # 临时将 REGIME 环境变量设为此任务的制度
-                    os.environ["REGIME"] = task_regime_id
+                    # 临时设置当前制度（线程局部，不影响其他请求）
+                    old_regime = get_current_regime_id()
+                    set_current_regime(task_regime_id)
                     result = process_message(message)
+                    set_current_regime(old_regime)  # 恢复
                     _latest_result = {"pending": False, "result": result}
                 except Exception as e:
                     logger.error(f"任务处理错误: {e}")
@@ -329,7 +326,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_error("Task not found", 404)
             return
 
-        regime = get_regime(_current_regime_id)
+        regime = get_current_regime()
         current_state = task.get("state", "")
 
         # 找到下一个状态

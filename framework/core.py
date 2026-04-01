@@ -147,3 +147,24 @@ class RegimeRegistry:
         """获取指定制度的元数据"""
         regime = cls.get(regime_id)
         return regime.meta
+
+
+# ── 当前制度管理 ─────────────────────────────────────────────────────────────────
+# 模块级变量，运行时维护当前激活的制度 ID
+_current_regime_id: str = "san_sheng_liu_bu"
+
+
+def set_current_regime(regime_id: str) -> None:
+    """设置当前制度（运行时切换）"""
+    global _current_regime_id
+    _current_regime_id = regime_id
+
+
+def get_current_regime_id() -> str:
+    """获取当前制度 ID"""
+    return _current_regime_id
+
+
+def get_current_regime() -> Regime:
+    """获取当前制度实例"""
+    return RegimeRegistry.get(_current_regime_id)

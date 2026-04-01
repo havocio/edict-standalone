@@ -10,6 +10,7 @@ Edict — 可插拔制度多 Agent 编排系统
 import sys
 import os
 from pathlib import Path
+from framework.core import set_current_regime, get_current_regime_id
 
 # 加载 .env
 _env = Path(__file__).parent / ".env"
@@ -23,12 +24,11 @@ else:
 
 def _get_regime_name() -> str:
     """获取当前制度名称（用于显示）"""
-    regime_id = os.getenv("REGIME", "san_sheng_liu_bu")
-    from regimes import get_current_regime
+    from framework.core import get_current_regime
     try:
         return get_current_regime().meta.name
     except Exception:
-        return regime_id
+        return get_current_regime_id()
 
 
 def cmd_dashboard():
@@ -49,7 +49,7 @@ def cmd_run(message: str, regime_override: str = None):
     """一次性运行流水线，打印结果"""
     # 如果命令行指定了制度，临时覆盖
     if regime_override:
-        os.environ["REGIME"] = regime_override
+        set_current_regime(regime_override)
 
     regime_name = _get_regime_name()
 
@@ -96,7 +96,7 @@ def cmd_run(message: str, regime_override: str = None):
 def cmd_chat(regime_override: str = None):
     """交互式命令行"""
     if regime_override:
-        os.environ["REGIME"] = regime_override
+        set_current_regime(regime_override)
     regime_name = _get_regime_name()
     print(f"🏛️  [{regime_name}] · 交互模式（输入 exit 退出）\n")
     while True:
@@ -131,7 +131,7 @@ def _list_regimes():
         print(f"     朝代: {m.era}")
         print(f"     标签: {', '.join(m.tags)}")
         print(f"     描述: {m.description[:60]}...")
-    print(f"\n  当前默认: {os.getenv('REGIME', 'san_sheng_liu_bu')}")
+    print(f"\n  当前默认: {get_current_regime_id()}")
     print()
 
 
