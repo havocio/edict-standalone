@@ -109,7 +109,7 @@ def get_task(task_id: str) -> Optional[dict]:
 
 
 # ── 核心操作 ──────────────────────────────────────────────────────────────────
-def create_task(title: str, content: str = "", source: str = "user") -> dict:
+def create_task(title: str, content: str = "", source: str = "user", regime_id: str = "") -> dict:
     """新建任务，初始状态 Pending"""
     with _lock:
         task_id = _generate_task_id()
@@ -119,6 +119,7 @@ def create_task(title: str, content: str = "", source: str = "user") -> dict:
             "title": title,
             "content": content,
             "source": source,
+            "regime_id": regime_id or os.getenv("REGIME", "san_sheng_liu_bu"),
             "state": "Pending",
             "created_at": now,
             "updated_at": now,

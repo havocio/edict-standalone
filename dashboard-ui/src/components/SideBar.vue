@@ -22,9 +22,14 @@
         :class="{ active: task.id === taskStore.activeId }"
         @click="taskStore.selectTask(task.id)"
       >
-        <div class="task-item-id">{{ task.id }}</div>
+        <div class="task-item-top">
+          <div class="task-item-id">{{ task.id }}</div>
+          <span v-if="task.regime_id" class="task-regime">{{ regimeName(task.regime_id) }}</span>
+        </div>
         <div class="task-item-title">{{ task.title }}</div>
-        <span class="badge" :class="'badge-' + task.state">{{ task.state }}</span>
+        <span class="badge" :style="badgeStyle(task.state, task.regime_id)">
+          {{ stateLabel(task.state, task.regime_id) }}
+        </span>
       </div>
     </div>
   </div>
@@ -50,6 +55,57 @@ async function send() {
   if (!msg || taskStore.polling) return
   message.value = ''
   await taskStore.createTask(msg, regimeStore.currentId)
+}
+
+// ── 动态 badge 颜色（与 TaskDetail 同逻辑）─────────────────────────
+const TERMINAL_COLORS: Record<string, [string, string]> = {
+  Done:      ['rgba(39,174,96,.15)',   '#27ae60'],
+  Cancelled: ['rgba(192,57,43,.15)',   '#c0392b'],
+  Blocked:   ['rgba(192,57,43,.10)',   '#e74c3c'],
+  Pending:   ['rgba(127,140,141,.2)',  '#7f8c8d'],
+}
+const STATE_PALETTE: [string, string][] = [
+  ['rgba(200,169,110,.15)', '#c8a96e'],
+  ['rgba(41,128,185,.15)',  '#2980b9'],
+  ['rgba(142,68,173,.15)',  '#8e44ad'],
+  ['rgba(230,126,34,.15)',  '#e67e22'],
+  ['rgba(52,152,219,.15)',  '#3498db'],
+  ['rgba(241,196,15,.15)',  '#e6b800'],
+  ['rgba(26,188,156,.15)',  '#1abc9c'],
+]
+const TERMINAL_STATES = ['Cancelled', 'Blocked', 'Done', 'Pending']
+
+function badgeStyle(state: string, regimeId?: string) {
+  if (TERMINAL_COLORS[state]) {
+    const [bg, color] = TERMINAL_COLORS[state]
+    return { background: bg, color }
+  }
+  // 找该任务所属制度的主流程状态序列，确定颜色索引
+  const rid = regimeId || regimeStore.currentId
+  const regime = regimeStore.regimes.find(r => r.id === rid) || regimeStore.currentRegime
+  const mainStates = regime
+    ? regime.states.filter(s => !TERMINAL_STATES.includes(s))
+    : []
+  const idx = mainStates.indexOf(state)
+  const [bg, color] = STATE_PALETTE[idx >= 0 ? idx % STATE_PALETTE.length : 0]
+  return { background: bg, color }
+}
+
+function stateLabel(state: string, regimeId?: string): string {
+  const SPECIAL: Record<string, string> = {
+    Pending: '待处理', Done: '已完成', Cancelled: '已取消', Blocked: '已阻塞',
+  }
+  if (SPECIAL[state]) return SPECIAL[state]
+  const rid = regimeId || regimeStore.currentId
+  const regime = regimeStore.regimes.find(r => r.id === rid) || regimeStore.currentRegime
+  if (!regime) return state
+  const role = regime.roles.find(r => r.id === state.toLowerCase() || r.id === state)
+  return role ? role.name : state
+}
+
+function regimeName(regimeId: string): string {
+  const r = regimeStore.regimes.find(r => r.id === regimeId)
+  return r ? r.name : regimeId
 }
 </script>
 
@@ -97,21 +153,18 @@ async function send() {
 }
 .task-item:hover { background: var(--bg3); border-color: var(--border); }
 .task-item.active { background: var(--bg3); border-color: var(--gold); }
+.task-item-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .task-item-id   { font-size: 10px; color: var(--text-dim); font-family: monospace; }
+.task-regime {
+  font-size: 9px; color: var(--text-dim);
+  background: var(--bg2); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+  max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .task-item-title { font-size: 13px; margin-top: 2px; line-height: 1.4; }
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: 4px;
   font-size: 11px; font-weight: 700; letter-spacing: .5px;
   margin-top: 4px;
 }
-.badge-Pending   { background: rgba(127,140,141,.2); color: var(--gray); }
-.badge-Taizi     { background: rgba(200,169,110,.15); color: var(--gold); }
-.badge-Zhongshu  { background: rgba(41,128,185,.15); color: var(--blue); }
-.badge-Menxia    { background: rgba(142,68,173,.15); color: var(--purple); }
-.badge-Assigned  { background: rgba(230,126,34,.15); color: #e67e22; }
-.badge-Doing     { background: rgba(52,152,219,.15); color: #3498db; }
-.badge-Review    { background: rgba(241,196,15,.15); color: #f1c40f; }
-.badge-Done      { background: rgba(39,174,96,.15); color: var(--green); }
-.badge-Cancelled { background: rgba(192,57,43,.15); color: var(--red); }
-.badge-Blocked   { background: rgba(192,57,43,.1); color: #e74c3c; }
 </style>

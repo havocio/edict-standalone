@@ -9,7 +9,11 @@
           {{ task.content.slice(0, 200) }}{{ task.content.length > 200 ? '…' : '' }}
         </div>
         <div class="task-meta">
-          <span class="badge" :class="'badge-' + task.state">{{ task.state }}</span>
+          <span class="badge" :style="badgeStyle(task.state)">{{ stateLabel(task.state) }}</span>
+          <span v-if="taskRegime" class="regime-tag">
+            {{ taskRegime.name }}
+            <span class="regime-era">{{ taskRegime.era }}</span>
+          </span>
           <span class="meta-item">创建 {{ formatTime(task.created_at) }}</span>
           <span class="meta-item">更新 {{ formatTime(task.updated_at) }}</span>
         </div>
@@ -26,20 +30,21 @@
       </div>
     </div>
 
-    <!-- 状态流程 -->
+    <!-- 状态流程（动态，按制度渲染） -->
     <div class="flow-track fade-in">
       <div class="section-title">流转路径</div>
-      <div class="flow-steps">
+      <div v-if="mainFlowStates.length" class="flow-steps">
         <div
-          v-for="(s, i) in flowStates"
+          v-for="(s, i) in mainFlowStates"
           :key="s"
           class="flow-step"
-          :class="{ done: i < stateIndex || isDone, active: i === stateIndex && !isDone }"
+          :class="{ done: isStateDone(i), active: isStateActive(i) }"
         >
-          <div class="dot">{{ flowIcons[s] }}</div>
-          <div class="label">{{ flowLabels[s] }}</div>
+          <div class="dot">{{ stateIcon(s) }}</div>
+          <div class="label">{{ stateLabel(s) }}</div>
         </div>
       </div>
+      <div v-else class="flow-empty">暂无流程信息</div>
     </div>
 
     <!-- 最终结果 -->
@@ -85,23 +90,124 @@
 import { computed } from 'vue'
 import type { Task } from '../types'
 import { useTaskStore } from '../stores/task'
+import { useRegimeStore } from '../stores/regime'
 
 const props = defineProps<{ task: Task }>()
 const taskStore = useTaskStore()
+const regimeStore = useRegimeStore()
 
-const flowStates = ['Pending', 'Taizi', 'Zhongshu', 'Menxia', 'Assigned', 'Doing', 'Review', 'Done']
-const flowLabels: Record<string, string> = {
-  Pending: '待处理', Taizi: '太子', Zhongshu: '中书省', Menxia: '门下省',
-  Assigned: '尚书省', Doing: '六部执行', Review: '复核', Done: '完成'
-}
-const flowIcons: Record<string, string> = {
-  Pending: '⌛', Taizi: '👑', Zhongshu: '📜', Menxia: '⚖️',
-  Assigned: '📋', Doing: '⚙️', Review: '🔍', Done: '✅'
-}
+// ── 找本任务所属制度 ─────────────────────────────────────────────────
+// 优先用任务的 regime_id，没有则 fallback 当前制度
+const taskRegime = computed(() => {
+  const rid = props.task.regime_id || regimeStore.currentId
+  return regimeStore.regimes.find(r => r.id === rid) || regimeStore.currentRegime
+})
+
+// 终止/特殊状态（不在主流程线上）
+const TERMINAL_STATES = ['Cancelled', 'Blocked']
+
+// 主流程状态序列：过滤掉终止状态，只保留正向流程
+const mainFlowStates = computed(() => {
+  if (!taskRegime.value) return []
+  return taskRegime.value.states.filter(s => !TERMINAL_STATES.includes(s))
+})
 
 const isDone = computed(() => props.task.state === 'Done')
 const isCancelled = computed(() => props.task.state === 'Cancelled')
-const stateIndex = computed(() => flowStates.indexOf(props.task.state))
+
+const stateIndex = computed(() => mainFlowStates.value.indexOf(props.task.state))
+
+function isStateDone(i: number) {
+  if (isDone.value) return true
+  return i < stateIndex.value
+}
+function isStateActive(i: number) {
+  return i === stateIndex.value && !isDone.value
+}
+
+// ── 状态标签（优先用制度角色名，特殊状态用固定中文）────────────────────
+const SPECIAL_LABELS: Record<string, string> = {
+  Pending: '待处理', Done: '已完成', Cancelled: '已取消', Blocked: '已阻塞',
+}
+
+function stateLabel(state: string): string {
+  if (SPECIAL_LABELS[state]) return SPECIAL_LABELS[state]
+  if (!taskRegime.value) return state
+  // 尝试从角色列表匹配（state 和 role.id 通常同名，或忽略大小写）
+  const role = taskRegime.value.roles.find(
+    r => r.id === state.toLowerCase() || r.id === state
+  )
+  return role ? role.name : state
+}
+
+// ── 状态图标 ─────────────────────────────────────────────────────────
+const SPECIAL_ICONS: Record<string, string> = {
+  Pending: '⌛', Done: '✅', Cancelled: '❌', Blocked: '🔒',
+}
+// 备用图标池（按索引轮转，当角色没有 icon 时使用）
+const FALLBACK_ICONS = ['🔵', '🟡', '🟠', '🟢', '🔷', '💠', '🔶']
+
+function stateIcon(state: string): string {
+  if (SPECIAL_ICONS[state]) return SPECIAL_ICONS[state]
+  if (!taskRegime.value) return '🔵'
+  const role = taskRegime.value.roles.find(
+    r => r.id === state.toLowerCase() || r.id === state
+  )
+  if (role?.icon) return role.icon
+  const idx = mainFlowStates.value.indexOf(state)
+  return FALLBACK_ICONS[idx % FALLBACK_ICONS.length]
+}
+
+// ── 动态 badge 颜色（基于状态 hash） ──────────────────────────────────
+const TERMINAL_COLORS: Record<string, [string, string]> = {
+  Done:      ['rgba(39,174,96,.15)',   '#27ae60'],
+  Cancelled: ['rgba(192,57,43,.15)',   '#c0392b'],
+  Blocked:   ['rgba(192,57,43,.10)',   '#e74c3c'],
+  Pending:   ['rgba(127,140,141,.2)',  '#7f8c8d'],
+}
+// 制度主流程状态按色板循环
+const STATE_PALETTE: [string, string][] = [
+  ['rgba(200,169,110,.15)', '#c8a96e'],   // 金
+  ['rgba(41,128,185,.15)',  '#2980b9'],   // 蓝
+  ['rgba(142,68,173,.15)',  '#8e44ad'],   // 紫
+  ['rgba(230,126,34,.15)',  '#e67e22'],   // 橙
+  ['rgba(52,152,219,.15)',  '#3498db'],   // 天蓝
+  ['rgba(241,196,15,.15)',  '#e6b800'],   // 黄
+  ['rgba(26,188,156,.15)',  '#1abc9c'],   // 青绿
+]
+
+function badgeStyle(state: string): Record<string, string> {
+  if (TERMINAL_COLORS[state]) {
+    const [bg, color] = TERMINAL_COLORS[state]
+    return { background: bg, color }
+  }
+  const idx = mainFlowStates.value.indexOf(state)
+  const [bg, color] = STATE_PALETTE[idx >= 0 ? idx % STATE_PALETTE.length : 0]
+  return { background: bg, color }
+}
+
+// ── 手动推进（从制度 state_transitions 动态获取） ──────────────────────
+function advance() {
+  if (!taskRegime.value) {
+    alert('当前制度信息未加载，无法推进')
+    return
+  }
+  // 从 flow_log 反推 state_transitions（因为 RegimeInfo 里没有直接暴露 transitions）
+  // 使用 mainFlowStates 顺序做简单推进：直接找下一个状态
+  const current = props.task.state
+  const idx = mainFlowStates.value.indexOf(current)
+
+  if (idx < 0) {
+    alert('当前状态无法手动推进')
+    return
+  }
+  if (idx >= mainFlowStates.value.length - 1) {
+    alert('已是最终状态')
+    return
+  }
+  const next = mainFlowStates.value[idx + 1]
+  taskStore.advanceTask(props.task.id, next)
+}
 
 const flowLog = computed(() => [...(props.task.flow_log || [])].reverse())
 const progressLog = computed(() => [...(props.task.progress_log || [])].reverse())
@@ -118,29 +224,6 @@ function unblock() {
   const note = prompt('请描述解除阻塞的原因（可留空）：', '人工排查后解除')
   if (note !== null) {
     taskStore.unblockTask(props.task.id, note || '人工解除阻塞')
-  }
-}
-
-function advance() {
-  const allowedMap: Record<string, string[]> = {
-    Pending: ['Taizi'],
-    Taizi: ['Zhongshu', 'Done'],
-    Zhongshu: ['Menxia'],
-    Menxia: ['Assigned', 'Zhongshu'],
-    Assigned: ['Doing'],
-    Doing: ['Review'],
-    Review: ['Done', 'Doing'],
-  }
-  const nexts = allowedMap[props.task.state] || []
-  if (!nexts.length) {
-    alert('当前状态无法手动推进')
-    return
-  }
-  const next = nexts.length === 1
-    ? nexts[0]
-    : prompt(`选择目标状态 (${nexts.join(' / ')})`)
-  if (next && nexts.includes(next)) {
-    taskStore.advanceTask(props.task.id, next)
   }
 }
 </script>
@@ -161,8 +244,18 @@ function advance() {
 }
 .task-title { font-size: 20px; font-weight: 700; color: var(--gold-light); line-height: 1.3; }
 .task-content { font-size: 13px; color: var(--text-dim); margin-top: 6px; line-height: 1.6; }
-.task-meta { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.task-meta { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
 .meta-item { font-size: 12px; color: var(--text-dim); }
+
+.regime-tag {
+  font-size: 11px; font-weight: 600;
+  background: rgba(200,169,110,.08);
+  border: 1px solid rgba(200,169,110,.2);
+  color: var(--gold); padding: 2px 8px; border-radius: 10px;
+  display: inline-flex; gap: 5px; align-items: center;
+}
+.regime-era { opacity: .65; font-weight: 400; }
+
 .task-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .action-btn {
   padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer;
@@ -187,6 +280,8 @@ function advance() {
   display: flex; gap: 0; align-items: center;
   overflow-x: auto; padding-bottom: 4px;
 }
+.flow-empty { font-size: 13px; color: var(--text-dim); padding: 8px 0; }
+
 .flow-step {
   display: flex; flex-direction: column; align-items: center;
   gap: 5px; min-width: 72px; position: relative;
@@ -250,18 +345,9 @@ function advance() {
 .progress-todos  { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
 .progress-todo   { font-size: 12px; color: var(--text-dim); }
 
+/* badge 样式：颜色通过 :style 动态注入，这里只给基础结构 */
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: 4px;
   font-size: 11px; font-weight: 700; letter-spacing: .5px;
 }
-.badge-Pending   { background: rgba(127,140,141,.2); color: var(--gray); }
-.badge-Taizi     { background: rgba(200,169,110,.15); color: var(--gold); }
-.badge-Zhongshu  { background: rgba(41,128,185,.15); color: var(--blue); }
-.badge-Menxia    { background: rgba(142,68,173,.15); color: var(--purple); }
-.badge-Assigned  { background: rgba(230,126,34,.15); color: #e67e22; }
-.badge-Doing     { background: rgba(52,152,219,.15); color: #3498db; }
-.badge-Review    { background: rgba(241,196,15,.15); color: #f1c40f; }
-.badge-Done      { background: rgba(39,174,96,.15); color: var(--green); }
-.badge-Cancelled { background: rgba(192,57,43,.15); color: var(--red); }
-.badge-Blocked   { background: rgba(192,57,43,.1); color: #e74c3c; }
 </style>

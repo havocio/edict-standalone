@@ -3,6 +3,7 @@ export interface Task {
   title: string
   content?: string
   state: string
+  regime_id?: string          // 任务创建时所用的制度 ID
   created_at: string
   updated_at: string
   result?: string
