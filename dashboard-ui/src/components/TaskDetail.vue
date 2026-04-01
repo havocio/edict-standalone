@@ -97,19 +97,21 @@ const taskStore = useTaskStore()
 const regimeStore = useRegimeStore()
 
 // ── 找本任务所属制度 ─────────────────────────────────────────────────
-// 优先用任务的 regime_id，没有则 fallback 当前制度
+// 优先用任务的 regime_id；没有 regime_id 的历史任务默认三省六部制
+// 不能 fallback 当前制度，否则切换制度后历史任务流程会变形
+const DEFAULT_REGIME_ID = 'san_sheng_liu_bu'
 const taskRegime = computed(() => {
-  const rid = props.task.regime_id || regimeStore.currentId
-  return regimeStore.regimes.find(r => r.id === rid) || regimeStore.currentRegime
+  const rid = props.task.regime_id || DEFAULT_REGIME_ID
+  return regimeStore.regimes.find(r => r.id === rid) || null
 })
 
-// 终止/特殊状态（不在主流程线上）
-const TERMINAL_STATES = ['Cancelled', 'Blocked']
+// 非主流程状态（不在流转步骤轴上展示）
+const SIDE_STATES = new Set(['Pending', 'Done', 'Cancelled', 'Blocked'])
 
-// 主流程状态序列：过滤掉终止状态，只保留正向流程
+// 主流程状态序列：只保留"中间过程"状态
 const mainFlowStates = computed(() => {
   if (!taskRegime.value) return []
-  return taskRegime.value.states.filter(s => !TERMINAL_STATES.includes(s))
+  return taskRegime.value.states.filter(s => !SIDE_STATES.has(s))
 })
 
 const isDone = computed(() => props.task.state === 'Done')
@@ -130,13 +132,17 @@ const SPECIAL_LABELS: Record<string, string> = {
   Pending: '待处理', Done: '已完成', Cancelled: '已取消', Blocked: '已阻塞',
 }
 
+function _findRole(state: string) {
+  if (!taskRegime.value) return null
+  const lower = state.toLowerCase()
+  return taskRegime.value.roles.find(
+    r => r.id.toLowerCase() === lower        // 大小写不敏感匹配
+  ) || null
+}
+
 function stateLabel(state: string): string {
   if (SPECIAL_LABELS[state]) return SPECIAL_LABELS[state]
-  if (!taskRegime.value) return state
-  // 尝试从角色列表匹配（state 和 role.id 通常同名，或忽略大小写）
-  const role = taskRegime.value.roles.find(
-    r => r.id === state.toLowerCase() || r.id === state
-  )
+  const role = _findRole(state)
   return role ? role.name : state
 }
 
@@ -144,18 +150,14 @@ function stateLabel(state: string): string {
 const SPECIAL_ICONS: Record<string, string> = {
   Pending: '⌛', Done: '✅', Cancelled: '❌', Blocked: '🔒',
 }
-// 备用图标池（按索引轮转，当角色没有 icon 时使用）
 const FALLBACK_ICONS = ['🔵', '🟡', '🟠', '🟢', '🔷', '💠', '🔶']
 
 function stateIcon(state: string): string {
   if (SPECIAL_ICONS[state]) return SPECIAL_ICONS[state]
-  if (!taskRegime.value) return '🔵'
-  const role = taskRegime.value.roles.find(
-    r => r.id === state.toLowerCase() || r.id === state
-  )
+  const role = _findRole(state)
   if (role?.icon) return role.icon
   const idx = mainFlowStates.value.indexOf(state)
-  return FALLBACK_ICONS[idx % FALLBACK_ICONS.length]
+  return FALLBACK_ICONS[idx >= 0 ? idx % FALLBACK_ICONS.length : 0]
 }
 
 // ── 动态 badge 颜色（基于状态 hash） ──────────────────────────────────

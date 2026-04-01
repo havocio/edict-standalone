@@ -58,6 +58,7 @@ async function send() {
 }
 
 // ── 动态 badge 颜色（与 TaskDetail 同逻辑）─────────────────────────
+const DEFAULT_REGIME_ID = 'san_sheng_liu_bu'
 const TERMINAL_COLORS: Record<string, [string, string]> = {
   Done:      ['rgba(39,174,96,.15)',   '#27ae60'],
   Cancelled: ['rgba(192,57,43,.15)',   '#c0392b'],
@@ -73,18 +74,22 @@ const STATE_PALETTE: [string, string][] = [
   ['rgba(241,196,15,.15)',  '#e6b800'],
   ['rgba(26,188,156,.15)',  '#1abc9c'],
 ]
-const TERMINAL_STATES = ['Cancelled', 'Blocked', 'Done', 'Pending']
+const SIDE_STATES = new Set(['Cancelled', 'Blocked', 'Done', 'Pending'])
+
+// 解析任务的所属制度（没有 regime_id 的老任务视为三省六部制）
+function _resolveRegime(regimeId?: string) {
+  const rid = regimeId || DEFAULT_REGIME_ID
+  return regimeStore.regimes.find(r => r.id === rid) || null
+}
 
 function badgeStyle(state: string, regimeId?: string) {
   if (TERMINAL_COLORS[state]) {
     const [bg, color] = TERMINAL_COLORS[state]
     return { background: bg, color }
   }
-  // 找该任务所属制度的主流程状态序列，确定颜色索引
-  const rid = regimeId || regimeStore.currentId
-  const regime = regimeStore.regimes.find(r => r.id === rid) || regimeStore.currentRegime
+  const regime = _resolveRegime(regimeId)
   const mainStates = regime
-    ? regime.states.filter(s => !TERMINAL_STATES.includes(s))
+    ? regime.states.filter(s => !SIDE_STATES.has(s))
     : []
   const idx = mainStates.indexOf(state)
   const [bg, color] = STATE_PALETTE[idx >= 0 ? idx % STATE_PALETTE.length : 0]
@@ -96,10 +101,10 @@ function stateLabel(state: string, regimeId?: string): string {
     Pending: '待处理', Done: '已完成', Cancelled: '已取消', Blocked: '已阻塞',
   }
   if (SPECIAL[state]) return SPECIAL[state]
-  const rid = regimeId || regimeStore.currentId
-  const regime = regimeStore.regimes.find(r => r.id === rid) || regimeStore.currentRegime
+  const regime = _resolveRegime(regimeId)
   if (!regime) return state
-  const role = regime.roles.find(r => r.id === state.toLowerCase() || r.id === state)
+  const lower = state.toLowerCase()
+  const role = regime.roles.find(r => r.id.toLowerCase() === lower)
   return role ? role.name : state
 }
 

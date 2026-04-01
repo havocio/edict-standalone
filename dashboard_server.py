@@ -158,16 +158,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    @staticmethod
+    def _serialize_task(task: dict) -> dict:
+        """序列化任务对象，补全缺失的 regime_id（历史任务兼容）"""
+        if not task.get("regime_id"):
+            task = dict(task)  # 浅拷贝，不改原对象
+            task["regime_id"] = "san_sheng_liu_bu"
+        return task
+
     def _handle_get_tasks(self):
         """获取所有任务"""
-        tasks = task_store.load_all_tasks()
+        tasks = [self._serialize_task(t) for t in task_store.load_all_tasks()]
         self._send_json({"tasks": tasks, "count": len(tasks)})
 
     def _handle_get_task(self, task_id: str):
         """获取单个任务"""
         task = task_store.get_task(task_id)
         if task:
-            self._send_json(task)
+            self._send_json(self._serialize_task(task))
         else:
             self._send_error("Task not found", 404)
 
@@ -175,7 +183,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         """获取最新任务状态（用于轮询）"""
         global _latest_result
         if _latest_result and not _latest_result.get("pending", False):
-            self._send_json(_latest_result)
+            self._send_json(self._serialize_task(_latest_result))
         else:
             self._send_json({"pending": True})
 
