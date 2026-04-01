@@ -35,10 +35,7 @@ def run_pipeline(user_message: str, task_store, on_event=None) -> dict:
     emit("taizi_start", {"message": user_message})
     taizi_result = taizi_dispatch(user_message, task_store)
 
-    if taizi_result.get("type") == "chat":
-        logger.debug("[Orchestrator] 太子判断为闲聊，直接回复")
-        return {"task_id": None, "result": taizi_result["reply"], "state": "Done"}
-
+    # 所有消息都视为任务，不再区分闲聊
     task_id = taizi_result["task_id"]
     logger.debug(f"[Orchestrator] 太子分拣完成 → task_id={task_id}")
     emit("taizi_done", {"task_id": task_id, "title": taizi_result.get("title")})

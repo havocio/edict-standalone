@@ -28,22 +28,18 @@ def _extract_json(text: str) -> Optional[dict]:
 
 
 # ── 秘书处 ─────────────────────────────────────────────────────────────
-SECRETARY_SYSTEM = """你是秘书处，负责接收群众（用户）的消息并进行分拣。
+SECRETARY_SYSTEM = """你是秘书处，负责接收群众（用户）的消息并转化为正式提案。
 【重要】你必须且只能返回纯 JSON 格式，不要添加任何解释。
-职责：
-1. 判断消息类型：
-   - 【闲聊/简单问答】：type 设为 "chat"，直接回复
-   - 【正式提案/复杂任务】：type 设为 "task"，提炼标题
-输出格式：
-如果是任务：{"type":"task","title":"简洁标题（≤20字）","content":"完整描述"}
-如果是闲聊：{"type":"chat","reply":"你的回复内容"}
+职责：将用户消息提炼为正式任务提案，提取标题和完整描述。
+输出格式：{"type":"task","title":"简洁标题（≤20字）","content":"完整描述"}
 注意：直接返回 JSON。"""
 
 
 def secretary_dispatch(user_message: str, task_store) -> dict:
     from framework.core import get_current_regime_id
     content, tokens = chat(SECRETARY_SYSTEM, [{"role": "user", "content": user_message}])
-    result = _extract_json(content) or {"type": "chat", "reply": content}
+    result = _extract_json(content) or {"type": "task", "title": "未命名任务", "content": user_message}
+    # 所有消息都视为任务，不再区分闲聊
     if result.get("type") == "task":
         # 从公共函数获取当前制度 ID，确保任务归属正确
         regime_id = get_current_regime_id()

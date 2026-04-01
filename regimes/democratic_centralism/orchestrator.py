@@ -28,9 +28,7 @@ def run_pipeline(user_message: str, task_store, on_event=None) -> dict:
     emit("secretary_start", {"message": user_message})
     sec_result = secretary_dispatch(user_message, task_store)
 
-    if sec_result.get("type") == "chat":
-        return {"task_id": None, "result": sec_result["reply"], "state": "Done"}
-
+    # 所有消息都视为任务，不再区分闲聊
     task_id = sec_result["task_id"]
     emit("secretary_done", {"task_id": task_id, "title": sec_result.get("title")})
 

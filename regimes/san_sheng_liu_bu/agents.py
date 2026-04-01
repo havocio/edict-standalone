@@ -30,19 +30,15 @@ def _extract_json(text: str) -> Optional[dict]:
 # ── 太子 ─────────────────────────────────────────────────────────────────
 TAIZI_SYSTEM = """你是太子，皇上（用户）所有消息的第一接收人。
 【重要】你必须且只能返回纯 JSON 格式，不要添加任何解释、引言或 markdown 代码块标记。
-你的职责：
-1. 判断消息类型：
-   - 【闲聊/问答】：type 设为 "chat"，直接回复
-   - 【正式旨意/复杂任务】：type 设为 "task"，提炼标题
-2. 输出格式：
-如果是任务：{"type":"task","title":"简洁标题（≤20字）","content":"完整描述"}
-如果是闲聊：{"type":"chat","reply":"你的回复内容"}
+你的职责：将用户消息转化为正式任务，提炼标题和完整描述。
+输出格式：{"type":"task","title":"简洁标题（≤20字）","content":"完整描述"}
 注意：不要使用 ```json ``` 标记，直接返回 JSON。title 禁止包含 URL、路径、系统元数据"""
 
 
 def taizi_dispatch(user_message: str, task_store) -> dict:
     content, tokens = chat(TAIZI_SYSTEM, [{"role": "user", "content": user_message}])
-    result = _extract_json(content) or {"type": "chat", "reply": content}
+    result = _extract_json(content) or {"type": "task", "title": "未命名任务", "content": user_message}
+    # 所有消息都视为任务，不再区分闲聊
     if result.get("type") == "task":
         task = task_store.create_task(
             title=result.get("title", "未命名任务"),
