@@ -286,17 +286,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
             def run_task():
                 global _latest_result
+                old_regime = None
                 try:
                     _latest_result = {"pending": True}
                     # 临时设置当前制度（线程局部，不影响其他请求）
                     old_regime = get_current_regime_id()
                     set_current_regime(task_regime_id)
                     result = process_message(message)
-                    set_current_regime(old_regime)  # 恢复
                     _latest_result = {"pending": False, "result": result}
                 except Exception as e:
                     logger.error(f"任务处理错误: {e}")
                     _latest_result = {"pending": False, "error": str(e)}
+                finally:
+                    if old_regime is not None:
+                        try:
+                            # 恢复原制度（忽略任何日志错误）
+                            from framework.core import set_current_regime as _set_regime
+                            _set_regime(old_regime)
+                        except Exception:
+                            pass  # 恢复失败不影响主流程
 
             # 在后台线程运行
             threading.Thread(target=run_task, daemon=True).start()
