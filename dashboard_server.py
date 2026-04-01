@@ -40,6 +40,9 @@ from framework import task_store
 _running_pipelines: dict[str, threading.Thread] = {}
 _latest_result: dict = {"pending": False}
 
+# 当前激活的制度 ID（运行时可切换，优先级高于 .env 中的 REGIME）
+_current_regime_id: str = os.getenv("REGIME", "san_sheng_liu_bu")
+
 
 class DashboardHandler(BaseHTTPRequestHandler):
     """HTTP 请求处理器"""
@@ -133,6 +136,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if path == "/api/tasks":
             self._handle_create_task()
+        elif path == "/api/regimes/switch":
+            self._handle_switch_regime()
         elif path.startswith("/api/tasks/") and path.endswith("/cancel"):
             task_id = path.split("/")[-2]
             self._handle_cancel_task(task_id)
@@ -182,16 +187,78 @@ class DashboardHandler(BaseHTTPRequestHandler):
             regimes.append({
                 "id": meta.id,
                 "name": meta.name,
+                "era": meta.era,
                 "description": meta.description,
-                "roles": meta.roles,
-                "states": meta.states
+                "tags": meta.tags,
+                "roles": [{"id": r.id, "name": r.name, "icon": r.icon, "description": r.description} for r in meta.roles],
+                "states": meta.states,
+                "role_count": len(meta.roles),
+                "state_count": len(meta.states),
             })
 
-        current = os.getenv("REGIME", "san_sheng_liu_bu")
+        global _current_regime_id
+        # 找当前制度完整对象
+        current_obj = next((r for r in regimes if r["id"] == _current_regime_id), None)
         self._send_json({
             "regimes": regimes,
-            "current": current
+            "current": _current_regime_id,
+            "current_obj": current_obj,
         })
+
+    def _handle_switch_regime(self):
+        """切换当前制度"""
+        global _current_regime_id
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length == 0:
+            self._send_error("Empty body", 400)
+            return
+
+        try:
+            body = self.rfile.read(content_length).decode()
+            data = json.loads(body)
+            regime_id = data.get("regime_id", "").strip()
+
+            if not regime_id:
+                self._send_error("regime_id is required", 400)
+                return
+
+            # 验证制度是否存在
+            metas = RegimeRegistry.list_all()
+            valid_ids = [m.id for m in metas]
+            if regime_id not in valid_ids:
+                self._send_error(f"Unknown regime: {regime_id}. Available: {valid_ids}", 400)
+                return
+
+            old_id = _current_regime_id
+            _current_regime_id = regime_id
+            os.environ["REGIME"] = regime_id
+            logger.info(f"制度已切换: {old_id} -> {regime_id}")
+
+            # 返回切换后的制度信息
+            regime = RegimeRegistry.get(regime_id)
+            meta = regime.meta
+            self._send_json({
+                "status": "switched",
+                "from": old_id,
+                "to": regime_id,
+                "regime": {
+                    "id": meta.id,
+                    "name": meta.name,
+                    "era": meta.era,
+                    "description": meta.description,
+                    "tags": meta.tags,
+                    "roles": [{"id": r.id, "name": r.name, "icon": r.icon, "description": r.description} for r in meta.roles],
+                    "states": meta.states,
+                    "role_count": len(meta.roles),
+                    "state_count": len(meta.states),
+                }
+            })
+
+        except json.JSONDecodeError:
+            self._send_error("Invalid JSON", 400)
+        except Exception as e:
+            logger.error(f"切换制度错误: {e}")
+            self._send_error(str(e), 500)
 
     def _handle_create_task(self):
         """创建新任务"""
@@ -204,6 +271,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length).decode()
             data = json.loads(body)
             message = data.get("message", "").strip()
+            # 允许前端指定制度，否则用当前激活制度
+            task_regime_id = data.get("regime_id", "").strip() or _current_regime_id
 
             if not message:
                 self._send_error("Message is required", 400)
@@ -216,6 +285,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 global _latest_result
                 try:
                     _latest_result = {"pending": True}
+                    # 临时将 REGIME 环境变量设为此任务的制度
+                    os.environ["REGIME"] = task_regime_id
                     result = process_message(message)
                     _latest_result = {"pending": False, "result": result}
                 except Exception as e:
@@ -225,7 +296,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # 在后台线程运行
             threading.Thread(target=run_task, daemon=True).start()
 
-            self._send_json({"status": "started", "message": "任务已启动"})
+            self._send_json({"status": "started", "message": "任务已启动", "regime_id": task_regime_id})
 
         except json.JSONDecodeError:
             self._send_error("Invalid JSON", 400)
@@ -250,8 +321,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_error("Task not found", 404)
             return
 
-        regime_id = os.getenv("REGIME", "san_sheng_liu_bu")
-        regime = get_regime(regime_id)
+        regime = get_regime(_current_regime_id)
         current_state = task.get("state", "")
 
         # 找到下一个状态

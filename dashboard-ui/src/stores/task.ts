@@ -82,8 +82,8 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   // 创建任务并轮询
-  async function createTask(message: string) {
-    await api('/api/tasks', 'POST', { message })
+  async function createTask(message: string, regimeId?: string) {
+    await api('/api/tasks', 'POST', { message, regime_id: regimeId })
     startPolling()
   }
 

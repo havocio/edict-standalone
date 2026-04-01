@@ -33,8 +33,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useTaskStore } from '../stores/task'
+import { useRegimeStore } from '../stores/regime'
 
 const taskStore = useTaskStore()
+const regimeStore = useRegimeStore()
 const message = ref('')
 
 function handleEnter(e: KeyboardEvent) {
@@ -47,7 +49,7 @@ async function send() {
   const msg = message.value.trim()
   if (!msg || taskStore.polling) return
   message.value = ''
-  await taskStore.createTask(msg)
+  await taskStore.createTask(msg, regimeStore.currentId)
 }
 </script>
 

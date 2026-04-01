@@ -33,8 +33,22 @@ export interface TaskStats {
   by_state?: Record<string, number>
 }
 
+export interface RegimeRole {
+  id: string
+  name: string
+  icon: string
+  description: string
+}
+
 export interface RegimeInfo {
   id: string
   name: string
+  era: string
   description: string
+  tags: string[]
+  roles: RegimeRole[]
+  states: string[]
+  role_count: number
+  state_count: number
 }
+
